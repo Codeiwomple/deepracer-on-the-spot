@@ -403,7 +403,7 @@ class Reward:
         self.segment_reward += 1
 
         if is_offtrack:
-            reward = 0
+            reward = -5
 
         return float(reward)
 
