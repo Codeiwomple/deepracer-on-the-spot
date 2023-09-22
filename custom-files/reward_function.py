@@ -9,12 +9,12 @@ class Reward:
 
         # Reward weightings
         self.location_weight = 1
-        self.heading_weight = 1
+        self.heading_weight = 0.5
         self.segment_step_reward_weight = 0
         self.partial_segment_reward_weight = (
             0  # Proportion of segment reward for getting close to the record
         )
-        self.speed_weight = 1
+        self.speed_weight = 0.5
         self.smoothness_weight = 0
 
         # Configurations
@@ -25,7 +25,7 @@ class Reward:
         # Proportion of record steps to give a partial reward 1.1 = within 10% of the segent record
         self.segment_reward_threshold = 1.1
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 2
+        self.distance_reward_cutoff = 1
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
         self.heading_threshold = 10
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
