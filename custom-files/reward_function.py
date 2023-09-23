@@ -9,12 +9,12 @@ class Reward:
 
         # Reward weightings
         self.location_weight = 1
-        self.heading_weight = 0.5
+        self.heading_weight = 1
         self.segment_step_reward_weight = 0
         self.partial_segment_reward_weight = (
             0  # Proportion of segment reward for getting close to the record
         )
-        self.speed_weight = 0.5
+        self.speed_weight = 1
         self.smoothness_weight = 0
 
         # Configurations
@@ -45,16 +45,16 @@ class Reward:
         self.previous_segment = None
         self.segment_steps = 0
         self.segment_step_record = [
-            33,
-            37,
-            42,
+            27,
+            31,
+            40,
             44,
             63,
             48,
             np.inf,
             np.inf,
-            47,
-            42,
+            43,
+            32,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
         self.segment_reward = 0
 
@@ -398,7 +398,7 @@ class Reward:
         # Smoothness reward: reward the car for driving smoothly and not changing direction irratically
         SMR = self.smoothness_weight * smoothness_reward
 
-        reward = LR + HR + SSR + SR + SMR
+        reward = LR + HR + SR  # + SSR + SMR
 
         # Update the logging variables
         self.segment_totals["LR"] += LR
