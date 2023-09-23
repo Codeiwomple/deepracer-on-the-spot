@@ -25,7 +25,7 @@ class Reward:
         # Proportion of record steps to give a partial reward 1.1 = within 10% of the segent record
         self.segment_reward_threshold = 1.1
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 1
+        self.distance_reward_cutoff = 2
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
         self.heading_threshold = 10
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
@@ -45,8 +45,17 @@ class Reward:
         self.previous_segment = None
         self.segment_steps = 0
         self.segment_step_record = [
-            np.inf
-        ] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
+            33,
+            37,
+            42,
+            44,
+            63,
+            48,
+            np.inf,
+            np.inf,
+            47,
+            42,
+        ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
         self.segment_reward = 0
 
         # Action space variables
