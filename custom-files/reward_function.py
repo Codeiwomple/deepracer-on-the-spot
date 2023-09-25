@@ -9,30 +9,30 @@ class Reward:
 
         # Reward weightings
         self.location_weight = 1
-        self.heading_weight = 1
+        self.heading_weight = 0.75
         self.segment_step_reward_weight = 0
         self.partial_segment_reward_weight = (
             0  # Proportion of segment reward for getting close to the record
         )
-        self.speed_weight = 1
+        self.speed_weight = 0
         self.smoothness_weight = 0
 
         # Configurations
         # Number of segments/ milestones to split the track into
-        self.num_segments = 10
+        self.num_segments = 15
         # Size of smooth driving buffer. Larger will encourage smoother steering but car may not be very responsive
         self.smoothing_buffer_size = 3
         # Proportion of record steps to give a partial reward 1.1 = within 10% of the segent record
         self.segment_reward_threshold = 1.1
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 2
+        self.distance_reward_cutoff = 3
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
         self.heading_threshold = 10
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
         # It simply means the car wont get close to 0 for being near the threshold. This value need to be bigger than the threshold.
-        self.heading_gradient = 15
+        self.heading_gradient = 10
         # Range of the steering angles as defined in the action space
-        self.steering_angle_range = 42
+        self.steering_angle_range = 60
 
         # Track geometries
         self.race_line = race_line
@@ -45,17 +45,8 @@ class Reward:
         self.previous_segment = None
         self.segment_steps = 0
         self.segment_step_record = [
-            27,
-            31,
-            40,
-            44,
-            63,
-            48,
-            np.inf,
-            np.inf,
-            43,
-            32,
-        ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
+            np.inf
+        ] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
         self.segment_reward = 0
 
         # Action space variables
@@ -398,7 +389,7 @@ class Reward:
         # Smoothness reward: reward the car for driving smoothly and not changing direction irratically
         SMR = self.smoothness_weight * smoothness_reward
 
-        reward = LR + HR + SR  # + SSR + SMR
+        reward = LR + HR + SR + SSR + SMR
 
         # Update the logging variables
         self.segment_totals["LR"] += LR
@@ -409,7 +400,7 @@ class Reward:
 
         """Update the tracking variable at the end of step"""
         self.segment_steps += 1
-        self.segment_reward += 1
+        self.segment_reward += reward
 
         if is_offtrack:
             reward = -5
