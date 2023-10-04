@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.spatial import KDTree
 from shapely.geometry import Point, LineString
 
 
@@ -9,208 +8,16 @@ class Reward:
 
         # Reward weightings
         self.location_weight = 1
-        self.heading_weight = 0.75
-        self.segment_step_reward_weight = 0
-        self.partial_segment_reward_weight = (
-            0  # Proportion of segment reward for getting close to the record
-        )
-        self.speed_weight = 0
-        self.smoothness_weight = 0
 
         # Configurations
-        # Number of segments/ milestones to split the track into
-        self.num_segments = 15
-        # Size of smooth driving buffer. Larger will encourage smoother steering but car may not be very responsive
-        self.smoothing_buffer_size = 3
-        # Proportion of record steps to give a partial reward 1.1 = within 10% of the segent record
-        self.segment_reward_threshold = 1.1
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 3
-        # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
-        self.heading_threshold = 10
-        # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
-        # It simply means the car wont get close to 0 for being near the threshold. This value need to be bigger than the threshold.
-        self.heading_gradient = 10
-        # Range of the steering angles as defined in the action space
-        self.steering_angle_range = 60
+        self.distance_reward_cutoff = 2
 
         # Track geometries
         self.race_line = race_line
-        self.race_line_tree = KDTree(race_line)
         self.race_line_ls = LineString(race_line)
         self.inner_border_ls = LineString(inner_border)
         self.outer_border_ls = LineString(outer_border)
-
-        # Segment variables
-        self.previous_segment = None
-        self.segment_steps = 0
-        self.segment_step_record = [
-            np.inf
-        ] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
-        self.segment_reward = 0
-
-        # Action space variables
-        self.max_speed = 4
-        self.min_speed = 1.3
-        self.max_steering_angle = 30
-
-        self.off_track = False
-
-        # Buffer for smooth steering
-        self.smoothing_buffer = [0] * self.smoothing_buffer_size
-        self.buffer_index = 0
-
-        # Output/ log variables
-        self.segment_totals = {
-            "LR": 0,
-            "HR": 0,
-            "SSR": 0,
-            "SR": 0,
-            "PR": 0,
-            "SMR": 0,
-            "Total": 0,
-        }
-
-        self.log_segment_steps = {i: [] for i in range(1, self.num_segments + 1)}
-        self.log_segemnt_speed = {i: [] for i in range(1, self.num_segments + 1)}
-        self.log_segment_distance = {i: [] for i in range(1, self.num_segments + 1)}
-        self.log_segment_smoothness = {i: [] for i in range(1, self.num_segments + 1)}
-
-        self.log_current_steps = 0
-        self.log_current_speed = []
-        self.log_current_distance = []
-        self.log_current_smoothness = []
-
-    def log(self, verbosity, message):
-        """Function to log/ print statements depending on verbosity level"""
-        if verbosity >= self.verbose:
-            print(message)
-
-    def buffer_add(self, value):
-        """Function to add an item to the buffer. It maintains a constant size by incrimenting the index as each item is added"""
-        self.smoothing_buffer[self.buffer_index] = value
-        self.buffer_index = (self.buffer_index + 1) % self.smoothing_buffer_size
-
-    def buffer_range(self):
-        """Function returns the range of values in the buffer"""
-        return max(self.smoothing_buffer) - min(self.smoothing_buffer)
-
-    def get_current_segment(self, closest_index, waypoints):
-        """Function to return the cars current segment"""
-
-        # TODO Find a way to include this calculation in the initialisation function
-        # Divide the waypoint as per the number of segments
-        waypoints_per_segment = len(waypoints) / self.num_segments
-        milestones = [
-            int(i * waypoints_per_segment) for i in range(self.num_segments + 1)
-        ]
-
-        # Determine current segment using the 'next' milestone
-        for i, milestone in enumerate(milestones):
-            if closest_index < milestone:
-                return i
-        return None
-
-    def reset_log_current(self):
-        """Function resets the logging/ tracking variables"""
-        self.log_current_steps = 0
-        self.log_current_speed = []
-        self.log_current_distance = []
-        self.log_current_smoothness = []
-
-    def update_log_segment(self, current_segment):
-        """Update the segment level trackers"""
-        self.log_segment_steps[current_segment].append(self.log_current_steps)
-        self.log_segemnt_speed[current_segment].append(np.mean(self.log_current_speed))
-        self.log_segment_distance[current_segment].append(
-            np.mean(self.log_current_distance)
-        )
-        self.log_segment_smoothness[current_segment].append(
-            np.mean(self.log_current_smoothness)
-        )
-
-        self.reset_log_current()
-
-    def calculate_segment_step_reward(self, current_segment, progress):
-        """Function to calculate the reward when the car passes a milestone"""
-        reward = 0
-        # If the previous segment is None the car has started part way through
-        # So no segment reward should be given: set to inf so no record recorded
-        if self.previous_segment is None:
-            self.log(2, "The car started part way through this segment")
-
-            self.segment_steps = np.inf
-
-        # Agent went off track during the segment
-        elif self.off_track:
-            self.log(2, "The agent went off track in this segment")
-            self.segment_steps = np.inf
-
-        # Agent was reset in the same segemnt
-        # If the car has completed the segemnt in an impossible progress score
-        elif progress <= (100 / self.num_segments) - 1:
-            self.log(
-                2,
-                "Impossible record: The agent may have been reset into the same segemnt",
-            )
-
-            self.segment_steps = np.inf
-            self.reset_log_current()
-
-        # If the car has jumped a segment
-        elif current_segment != self.previous_segment + 1:
-            if current_segment == (self.previous_segment + 1) % self.num_segments:
-                # New lap! TODO
-                self.log(2, "Car has started a new lap!")
-
-                reward = self.segment_complete(current_segment)
-                self.segment_steps = 0
-
-                self.log(2, "The current segment records are:")
-                self.log(2, self.segment_step_record)
-            else:
-                # Agent has been reset
-                self.log(2, "The agent has been reset")
-                # Set steps to inf to stop a record for partial completion
-                self.segment_steps = np.inf
-                self.reset_log_current()
-
-        # Car completed the segemnt properly
-        else:
-            reward = self.segment_complete(current_segment)
-            self.segment_steps = 0
-
-        self.off_track = False
-        return reward
-
-    def segment_complete(self, current_segment):
-        """Function handles the proper completion of a segment"""
-
-        self.update_log_segment(current_segment)
-
-        # If car has performed a record segment
-        if self.segment_steps <= self.segment_step_record[current_segment - 2]:
-            # Update the record
-            self.segment_step_record[current_segment - 2] = self.segment_steps
-
-            self.log(2, "New record for segment")
-            self.log(2, self.segment_step_record)
-
-            return self.segment_reward
-
-        # Partial reward for completion within a certain percentage of the record
-        partial_reward = (
-            self.segment_step_record[current_segment - 2]
-            * self.segment_reward_threshold
-        )
-
-        if self.segment_steps <= partial_reward:
-            self.log(2, "Partial segment reward")
-            self.log(2, self.segment_step_record)
-
-            return self.segment_reward * self.partial_segment_reward_weight
-
-        return 0
 
     def calculate_location_reward(self, car_loc, track_width):
         """
@@ -226,8 +33,6 @@ class Reward:
         # Calculate the cutoff
         cutoff_distance = track_width / self.distance_reward_cutoff
 
-        self.log_current_distance.append(racing_dist)
-
         # If the car is outside the reward section
         if racing_dist > cutoff_distance:
             return 0
@@ -237,173 +42,19 @@ class Reward:
 
         return 0
 
-    def heading_reward(self, direction, heading):
-        """
-        Function calculates the reward for the car based on its heading compared to the heading of the racing line.
-        This is based on a linear gradient defined in the configuration variables in the init function
-        """
-        # Calculate the difference between the track direction and the heading direction of the car
-        direction_diff = abs(direction - heading)
-        if direction_diff > 180:
-            direction_diff = 360 - direction_diff
-
-        # Reward the car based on how close it is to the correct heading. If it doesnt meet the threshold, give it nothing.
-        if direction_diff >= self.heading_threshold:
-            heading_reward = 0
-        else:
-            # If the car is within the threshold for a reward, allocate based on the gradient variable
-            heading_reward = (
-                self.heading_gradient - direction_diff
-            ) / self.heading_gradient
-
-        return heading_reward
-
-    def opposite_heading(self, heading):
-        """Function return the opposite of the given heading"""
-        if heading > 0:
-            return heading - 180
-        else:
-            return heading + 180
-
-        return 0
-
-    def calculate_heading_reward(self, car_loc, heading):
-        """
-        Function calculates the heading reward.
-        As it uses the closes 2 waypoints to calculate the heading of the racingline it is possible that one of the points is behind the car.
-        In this case the heading may be 180deg out. It is fair to assume the car will not be heading 180deg in the wrong direction
-        so the reward for both headings is calculated and the max retuned.
-        """
-        # Get the 2 closest points on the racing line to the car
-        closest_points_i = self.race_line_tree.query([car_loc.x, car_loc.y], k=2)[1]
-        cp1, cp2 = self.race_line[closest_points_i]
-
-        # Calculate the direction in radians, arctan2(dy, dx), the result is (-pi, pi) in radians
-        direction = np.arctan2(cp1[1] - cp2[1], cp1[0] - cp2[0])
-
-        # Convert to degree
-        direction = np.degrees(direction)
-
-        # Calculate the reward for the current and opposite headings
-        # This will ensure the reward is track direction agnostic if the clostest 2 race line point are in the wrong direction to race
-        # Safe to assume the car wont be heading in the oppsoite direction for any significant ammount of time
-        heading_reward = self.heading_reward(direction, heading)
-        opposite_heading_reward = self.heading_reward(
-            direction, self.opposite_heading(heading)
-        )
-
-        return max(heading_reward, opposite_heading_reward)
-
-    def calculate_speed_reward(self, speed, steering_angle):
-        """
-        Function allocates reward based on how fast the car is moving.
-        """
-        # Normalise speed
-        return (speed - self.min_speed) / (self.max_speed - self.min_speed)
-
-    def calculate_smoothness_reward(self, steering_angle):
-        """
-        Function calculates a reward based on the range of the last n steering angles.
-        The smaller the range, the larger the reward. This will discourage the car from zigzagging
-        and steer more efficiently
-        """
-        # Add to buffer
-        self.buffer_add(steering_angle)
-
-        self.log_current_smoothness.append(self.buffer_range())
-
-        return 1 - (self.buffer_range() / self.steering_angle_range)
-
     def reward_function(self, params):
         # DeepRacer input parameters
         x = params["x"]
         y = params["y"]
         track_width = params["track_width"]
-        heading = params["heading"]
-        progress = params["progress"]
-        speed = params["speed"]
-        steps = params["steps"]
-        steering_angle = params["steering_angle"]
-        is_offtrack = params["is_offtrack"]
-        waypoints = params["waypoints"]
-        closest_index = params["closest_waypoints"][0]
-
-        self.log_current_steps += 1
-        self.log_current_speed.append(speed)
 
         # Car location
         car_loc = Point(x, y)
 
-        """Action level rewards"""
         location_reward = self.calculate_location_reward(car_loc, track_width)
-        heading_reward = self.calculate_heading_reward(car_loc, heading)
-        speed_reward = self.calculate_speed_reward(speed, steering_angle)
-        smoothness_reward = self.calculate_smoothness_reward(steering_angle)
 
-        """Segment level rewards"""
-        # Calculate which segment of the track the car is currently in
-        current_segment = self.get_current_segment(closest_index, waypoints)
-
-        step_reward = 0
-
-        # Maintain segment level off-track variable
-        if is_offtrack:
-            self.off_track = True
-
-        # If the car has changed segment
-        if current_segment != self.previous_segment:
-            step_reward = self.calculate_segment_step_reward(current_segment, progress)
-
-            # Update the log
-            self.segment_totals["SSR"] = step_reward * self.segment_step_reward_weight
-
-            self.log(2, "Rewards for this segment: ")
-            self.log(2, self.segment_totals)
-
-            self.log(2, "segment_steps = ")
-            self.log(2, self.log_segment_steps)
-            self.log(2, "segment_speeds = ")
-            self.log(2, self.log_segemnt_speed)
-            self.log(2, "segment_distances = ")
-            self.log(2, self.log_segment_distance)
-            self.log(2, "segment_smoothness = ")
-            self.log(2, self.log_segment_smoothness)
-
-            # Update tracking and logging variables
-            for k in self.segment_totals:
-                self.segment_totals[k] = 0
-
-            self.segment_reward = 0
-
-        self.previous_segment = current_segment
-
-        """Calculate the reward for this step"""
         # Location reward: Based on how far the car is from the racing line
-        LR = self.location_weight * location_reward
-        # Heading reward: reward the car for deading in the direction of the racing line
-        HR = self.heading_weight * heading_reward
-        # Segment step reward: Reward for completeing each segment in a minimum number of steps
-        SSR = self.segment_step_reward_weight * step_reward
-        # Speed reward: Reward for faster speed at lower steering angles, slower speed at higher steering angles
-        SR = self.speed_weight * speed_reward
-        # Smoothness reward: reward the car for driving smoothly and not changing direction irratically
-        SMR = self.smoothness_weight * smoothness_reward
-
-        reward = LR + HR + SR + SSR + SMR
-
-        # Update the logging variables
-        self.segment_totals["LR"] += LR
-        self.segment_totals["HR"] += HR
-        self.segment_totals["SR"] += SR
-        self.segment_totals["SMR"] += SMR
-        self.segment_totals["Total"] += reward
-
-        """Update the tracking variable at the end of step"""
-        self.segment_steps += 1
-        self.segment_reward += reward
-
-        if is_offtrack:
-            reward = -5
+        reward = self.location_weight * location_reward
 
         return float(reward)
 
@@ -411,7 +62,7 @@ class Reward:
 ## Copy and past variables from race line calc
 race_line = np.array(
     [
-        [-0.0859162, -3.17768042],
+        [-0.12527623, -3.1533136],
         [0.02440991, -3.24644196],
         [0.13473509, -3.31520499],
         [0.28019151, -3.40586448],
@@ -423,111 +74,111 @@ race_line = np.array(
         [1.81490648, -4.36235297],
         [2.07058543, -4.52196288],
         [2.32639319, -4.68133747],
-        [2.58222011, -4.84035411],
-        [2.83863405, -4.99669141],
-        [3.09613764, -5.14805313],
-        [3.35509464, -5.29217702],
-        [3.61573216, -5.42688063],
-        [3.87813933, -5.55009791],
-        [4.14226859, -5.65989574],
-        [4.407939, -5.75446782],
-        [4.6748364, -5.83214471],
-        [4.94251501, -5.891318],
-        [5.21038329, -5.9304037],
-        [5.47767638, -5.94779782],
-        [5.74340144, -5.94179047],
-        [6.00623242, -5.91051217],
-        [6.26522086, -5.85583548],
-        [6.51941987, -5.77853092],
-        [6.7678915, -5.67919861],
-        [7.00963317, -5.55823002],
-        [7.2435547, -5.4159418],
-        [7.46843983, -5.25262774],
-        [7.68291772, -5.06865078],
-        [7.88543606, -4.86455708],
-        [8.07425184, -4.64124179],
-        [8.24740029, -4.40012943],
-        [8.4026887, -4.14348241],
-        [8.53800392, -3.87457564],
-        [8.65140811, -3.59783589],
-        [8.74211567, -3.31729669],
-        [8.80966439, -3.03569491],
-        [8.8541618, -2.75500209],
-        [8.87595287, -2.47670506],
-        [8.87536365, -2.20200465],
-        [8.85266521, -1.93193693],
-        [8.80796573, -1.66747334],
-        [8.7411777, -1.40959867],
-        [8.65189281, -1.15942598],
-        [8.53953932, -0.91823688],
-        [8.40783691, -0.68544464],
-        [8.2594224, -0.46058172],
-        [8.09689307, -0.24307643],
-        [7.9229218, -0.03223282],
-        [7.74025322, 0.17286026],
-        [7.55157943, 0.37341618],
-        [7.35938099, 0.57096173],
-        [7.17119565, 0.76198637],
-        [6.9900316, 0.95696221],
-        [6.82226893, 1.15937892],
-        [6.67397695, 1.3723183],
-        [6.55111076, 1.59835266],
-        [6.46029567, 1.83954386],
-        [6.39496713, 2.09168378],
-        [6.34957105, 2.35184232],
-        [6.31804611, 2.61735649],
-        [6.29380857, 2.88562401],
-        [6.26697522, 3.15649225],
-        [6.2321694, 3.42408844],
-        [6.18433416, 3.68502329],
-        [6.11938546, 3.93543222],
-        [6.03441789, 4.17158619],
-        [5.92756334, 4.39006957],
-        [5.79776809, 4.5875963],
-        [5.64456715, 4.76063638],
-        [5.46794712, 4.90493175],
-        [5.26852374, 5.01498064],
-        [5.04828571, 5.08332657],
-        [4.81510244, 5.11493144],
-        [4.57293832, 5.10886158],
-        [4.32579428, 5.06383628],
-        [4.07811017, 4.97856789],
-        [3.83506041, 4.85228573],
-        [3.60278013, 4.68539201],
+        [2.58210292, -4.84089117],
+        [2.8379686, -4.99958508],
+        [3.094709, -5.15481916],
+        [3.35289132, -5.30399479],
+        [3.61292166, -5.44455683],
+        [3.87502634, -5.57407016],
+        [4.13925362, -5.69023872],
+        [4.40547461, -5.79093236],
+        [4.67338798, -5.87419053],
+        [4.94252656, -5.93811591],
+        [5.21223889, -5.98084729],
+        [5.48165693, -6.00053669],
+        [5.74963306, -5.99523813],
+        [6.01461416, -5.96286526],
+        [6.2753743, -5.90517536],
+        [6.53081578, -5.82336824],
+        [6.77988006, -5.71835568],
+        [7.02150023, -5.5909056],
+        [7.25457669, -5.44174195],
+        [7.47794791, -5.27159596],
+        [7.69037758, -5.08129291],
+        [7.89054307, -4.87183604],
+        [8.07701828, -4.64449651],
+        [8.24831367, -4.40099011],
+        [8.4029343, -4.1436369],
+        [8.53959533, -3.87516931],
+        [8.65724951, -3.59895544],
+        [8.75409566, -3.3180238],
+        [8.82884064, -3.03507321],
+        [8.88083123, -2.7521989],
+        [8.90973355, -2.47110337],
+        [8.91540024, -2.19323561],
+        [8.89772203, -1.91989383],
+        [8.8565174, -1.65231683],
+        [8.79140394, -1.39179087],
+        [8.70183033, -1.1397262],
+        [8.5869529, -0.8978125],
+        [8.45062284, -0.66563957],
+        [8.29579227, -0.44273569],
+        [8.12536993, -0.22843998],
+        [7.94234577, -0.0218986],
+        [7.74977618, 0.17801476],
+        [7.55062949, 0.37275895],
+        [7.34765856, 0.564144],
+        [7.14873985, 0.7493342],
+        [6.95787351, 0.93931933],
+        [6.78216355, 1.1381704],
+        [6.62823648, 1.34932316],
+        [6.50275695, 1.57556628],
+        [6.41328107, 1.81888878],
+        [6.35291698, 2.07433341],
+        [6.31548834, 2.33847026],
+        [6.29412741, 2.6083363],
+        [6.28127255, 2.88113707],
+        [6.26531792, 3.15756448],
+        [6.24042862, 3.4309714],
+        [6.20113178, 3.69806842],
+        [6.14302328, 3.95498046],
+        [6.06295856, 4.1978227],
+        [5.95894516, 4.42291664],
+        [5.82982176, 4.62656067],
+        [5.67507751, 4.804672],
+        [5.49483162, 4.95237046],
+        [5.29003785, 5.06339195],
+        [5.06339841, 5.12925905],
+        [4.82407107, 5.15605111],
+        [4.57662486, 5.14317459],
+        [4.32558008, 5.08998594],
+        [4.07572991, 4.99603664],
+        [3.83233406, 4.86166522],
+        [3.6012028, 4.68851783],
         [3.38855001, 4.48065446],
         [3.20050274, 4.24566553],
-        [3.04772761, 3.99393],
-        [2.9320649, 3.73522481],
-        [2.85128177, 3.47385617],
-        [2.80299499, 3.21234109],
-        [2.78544196, 2.95238446],
-        [2.79749061, 2.6953225],
-        [2.83880137, 2.44238896],
-        [2.91013358, 2.19498376],
-        [3.00748408, 1.95336988],
-        [3.12714916, 1.71737322],
-        [3.26535734, 1.48645529],
-        [3.41804817, 1.25974154],
-        [3.58082102, 1.03606887],
+        [3.04379742, 3.99472452],
+        [2.92127365, 3.73615557],
+        [2.83200739, 3.47407472],
+        [2.77453878, 3.21103353],
+        [2.74783864, 2.94884284],
+        [2.75137727, 2.68899062],
+        [2.78518998, 2.43288092],
+        [2.8538105, 2.18289516],
+        [2.95261805, 1.9398036],
+        [3.07743961, 1.70372083],
+        [3.22413611, 1.47423599],
+        [3.38827513, 1.25043782],
+        [3.56496717, 1.03095051],
         [3.74894941, 0.81404784],
-        [3.91326039, 0.59484047],
-        [4.06428064, 0.37387205],
-        [4.19194527, 0.15056932],
-        [4.28866262, -0.07427099],
-        [4.34921591, -0.29848393],
-        [4.37016034, -0.51868563],
-        [4.34901531, -0.73027968],
-        [4.28369428, -0.92712883],
-        [4.17228546, -1.10068752],
-        [4.01390327, -1.23801968],
-        [3.82515563, -1.34187957],
-        [3.61153733, -1.40991538],
-        [3.37811265, -1.44024654],
-        [3.12993838, -1.4318349],
-        [2.87214332, -1.3849706],
-        [2.60973282, -1.30206373],
-        [2.34695724, -1.18801274],
-        [2.08655292, -1.04999381],
+        [3.92768357, 0.59653445],
+        [4.09033132, 0.37551606],
+        [4.2272036, 0.15010956],
+        [4.33083284, -0.07878787],
+        [4.39599877, -0.30861393],
+        [4.41909345, -0.53539798],
+        [4.3975918, -0.75384401],
+        [4.32951605, -0.95707208],
+        [4.21318059, -1.13572812],
+        [4.04824595, -1.27597729],
+        [3.85194567, -1.38018053],
+        [3.63062237, -1.44601003],
+        [3.39014224, -1.47194498],
+        [3.13618975, -1.45748532],
+        [2.87433572, -1.40374869],
+        [2.60969102, -1.31407009],
+        [2.34622988, -1.19424482],
+        [2.08609544, -1.05208366],
         [1.82925349, -0.89654608],
         [1.57377015, -0.73666516],
         [1.31845481, -0.57653313],
@@ -542,102 +193,102 @@ race_line = np.array(
         [-0.94844002, 0.91089358],
         [-1.19401934, 1.08551164],
         [-1.43759941, 1.26282489],
-        [-1.67743424, 1.44431593],
-        [-1.90600475, 1.63424861],
-        [-2.11432442, 1.83418715],
-        [-2.29474975, 2.04371214],
-        [-2.44199722, 2.26114529],
-        [-2.55289725, 2.48414917],
-        [-2.62555967, 2.71010747],
-        [-2.65838928, 2.93620932],
-        [-2.64938906, 3.15923837],
-        [-2.59328793, 3.37441757],
-        [-2.49584667, 3.57858695],
-        [-2.36119474, 3.76958035],
-        [-2.19277547, 3.94592052],
-        [-1.99397999, 4.1068664],
-        [-1.76830875, 4.25296408],
-        [-1.57510047, 4.41912025],
-        [-1.41962257, 4.60223892],
-        [-1.30504587, 4.79819192],
-        [-1.23345339, 5.002479],
-        [-1.20694356, 5.21027555],
-        [-1.22843986, 5.4158807],
-        [-1.30230284, 5.61128073],
-        [-1.41777776, 5.79229718],
-        [-1.57159619, 5.95499138],
-        [-1.76079548, 6.09578776],
-        [-1.98211169, 6.21153645],
-        [-2.23129567, 6.30007685],
-        [-2.50275266, 6.36115303],
-        [-2.78997605, 6.39703959],
-        [-3.08640362, 6.41294898],
+        [-1.6787059, 1.44330812],
+        [-1.91307896, 1.63056601],
+        [-2.13110747, 1.82836672],
+        [-2.3228072, 2.03731055],
+        [-2.48065704, 2.25597194],
+        [-2.59996936, 2.48174726],
+        [-2.67804096, 2.71150162],
+        [-2.71285076, 2.94181256],
+        [-2.70210251, 3.16876182],
+        [-2.64003434, 3.38653372],
+        [-2.533707, 3.59141404],
+        [-2.38832686, 3.78106325],
+        [-2.20854589, 3.95420762],
+        [-1.99934008, 4.11085735],
+        [-1.76595137, 4.2531955],
+        [-1.56255566, 4.41617996],
+        [-1.39593819, 4.59798132],
+        [-1.27068712, 4.79494071],
+        [-1.19005781, 5.00249594],
+        [-1.15714543, 5.21539864],
+        [-1.17572402, 5.42717263],
+        [-1.25103186, 5.62842815],
+        [-1.370755, 5.81408861],
+        [-1.53107097, 5.97961179],
+        [-1.72834668, 6.12099614],
+        [-1.95847474, 6.2348867],
+        [-2.21612022, 6.31935312],
+        [-2.49463595, 6.37482792],
+        [-2.7866988, 6.40481421],
+        [-3.08562632, 6.4157888],
         [-3.38679743, 6.41631508],
         [-3.6881907, 6.41572797],
-        [-3.98943235, 6.41481892],
-        [-4.29011395, 6.41165703],
-        [-4.58971463, 6.40434385],
-        [-4.88760409, 6.39103008],
-        [-5.18305756, 6.36995163],
-        [-5.47527223, 6.33945594],
-        [-5.76338842, 6.29803591],
-        [-6.04649641, 6.24432399],
-        [-6.32369537, 6.17720533],
-        [-6.59407164, 6.09572957],
-        [-6.85669915, 5.99909502],
-        [-7.1106625, 5.88668102],
-        [-7.35502476, 5.7579821],
-        [-7.58877777, 5.61254126],
-        [-7.81078085, 5.44990544],
-        [-8.01980556, 5.26976088],
-        [-8.21446527, 5.07192382],
-        [-8.39298516, 4.85624347],
-        [-8.55327357, 4.62298669],
-        [-8.69277126, 4.37307401],
-        [-8.80846549, 4.10856765],
-        [-8.8972738, 3.83319129],
-        [-8.95660701, 3.55221826],
-        [-8.9852056, 3.27145182],
-        [-8.98316421, 2.99582665],
-        [-8.95137617, 2.72888126],
-        [-8.89094407, 2.47306452],
-        [-8.80274404, 2.23030185],
-        [-8.68726622, 2.00243367],
-        [-8.54455148, 1.79153879],
-        [-8.3741134, 1.60031633],
-        [-8.18308592, 1.42533419],
-        [-7.97393488, 1.26574617],
-        [-7.74898862, 1.12046911],
-        [-7.51048418, 0.98819811],
-        [-7.26064928, 0.86724725],
-        [-7.00093058, 0.75520988],
-        [-6.72680704, 0.64714577],
-        [-6.45336664, 0.53206018],
-        [-6.18221359, 0.41112824],
-        [-5.91317497, 0.28482214],
-        [-5.64607927, 0.15360105],
-        [-5.38076254, 0.01789839],
-        [-5.11706232, -0.12186115],
-        [-4.85481932, -0.26526511],
-        [-4.59387613, -0.41190945],
-        [-4.33407483, -0.56139236],
-        [-4.07526042, -0.71332277],
-        [-3.81727347, -0.8673017],
-        [-3.55995342, -1.02292975],
-        [-3.30313841, -1.1798058],
-        [-3.04666161, -1.33751717],
-        [-2.79035515, -1.49564896],
-        [-2.53416394, -1.65406502],
-        [-2.27808727, -1.8127632],
-        [-2.02206956, -1.97160641],
-        [-1.76613994, -2.13066599],
-        [-1.51029903, -2.28994304],
-        [-1.25451499, -2.44936103],
-        [-0.99872929, -2.60877645],
-        [-0.74294394, -2.76819146],
-        [-0.48715876, -2.92760694],
-        [-0.23137365, -3.08702302],
-        [-0.0859162, -3.17768042],
+        [-3.98932902, 6.41441355],
+        [-4.28980541, 6.41051731],
+        [-4.58908542, 6.40222533],
+        [-4.88654435, 6.38778697],
+        [-5.18147544, 6.36553357],
+        [-5.47310259, 6.33389846],
+        [-5.76059546, 6.29144044],
+        [-6.04307976, 6.23685272],
+        [-6.31966332, 6.16900583],
+        [-6.5894756, 6.08700441],
+        [-6.85165393, 5.99012462],
+        [-7.10533518, 5.8777818],
+        [-7.34959747, 5.74942945],
+        [-7.5836199, 5.60482219],
+        [-7.80640075, 5.4435709],
+        [-8.01689002, 5.26540242],
+        [-8.21384237, 5.07001584],
+        [-8.39572039, 4.85709722],
+        [-8.56061589, 4.62644754],
+        [-8.70606219, 4.37817197],
+        [-8.82894276, 4.11327574],
+        [-8.92553455, 3.83467449],
+        [-8.99212848, 3.54818379],
+        [-9.02653425, 3.26125912],
+        [-9.02862162, 2.9798899],
+        [-8.99938847, 2.70786792],
+        [-8.93998014, 2.44772964],
+        [-8.85129246, 2.2015542],
+        [-8.7339257, 1.97135345],
+        [-8.58789543, 1.75952401],
+        [-8.41274157, 1.56916874],
+        [-8.21407507, 1.39840511],
+        [-7.99591324, 1.24541331],
+        [-7.76197407, 1.10783656],
+        [-7.51598203, 0.98267052],
+        [-7.2617309, 0.86632787],
+        [-7.0031715, 0.75468988],
+        [-6.73210386, 0.63359108],
+        [-6.46238108, 0.50908628],
+        [-6.19394995, 0.38131784],
+        [-5.92675918, 0.25042162],
+        [-5.66075907, 0.11652827],
+        [-5.39590097, -0.02023511],
+        [-5.13213265, -0.15973322],
+        [-4.8694023, -0.30183243],
+        [-4.60764667, -0.44637114],
+        [-4.34679392, -0.59316689],
+        [-4.08677687, -0.74204921],
+        [-3.82751088, -0.89280339],
+        [-3.56891508, -1.0452189],
+        [-3.31090117, -1.19904805],
+        [-3.0534002, -1.35403932],
+        [-2.79636803, -1.50989646],
+        [-2.53975528, -1.66625683],
+        [-2.28356726, -1.822825],
+        [-2.02792001, -1.97941469],
+        [-1.77318654, -2.13575554],
+        [-1.51926004, -2.29177911],
+        [-1.26708036, -2.44699557],
+        [-1.01785228, -2.60065923],
+        [-0.7737104, -2.75144674],
+        [-0.53844994, -2.89700275],
+        [-0.31867121, -3.03322406],
+        [-0.12527623, -3.1533136],
     ]
 )
 outer_boarder = np.array(
