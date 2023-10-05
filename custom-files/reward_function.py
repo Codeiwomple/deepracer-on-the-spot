@@ -113,6 +113,7 @@ class Reward:
         x = params["x"]
         y = params["y"]
         track_width = params["track_width"]
+        heading = params["heading"]
 
         # Car location
         car_loc = Point(x, y)
