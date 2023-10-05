@@ -166,7 +166,6 @@ class Reward:
         # Calculate the cutoff
         cutoff_distance = track_width / self.distance_reward_cutoff
 
-
         # If the car is outside the reward section
         if racing_dist > cutoff_distance:
             return 0
@@ -252,6 +251,7 @@ class Reward:
         current_segment = self.get_current_segment(closest_index, waypoints)
 
         SPR = 0
+        self.segment_start_progress = 0
 
         # Add a progress reward for segments 5 and 7
         if current_segment == 5 or current_segment == 7:
