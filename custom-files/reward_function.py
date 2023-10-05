@@ -49,7 +49,7 @@ class Reward:
             31,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
         self.segment_reward = 0
-        self.segment_start_progress = 0
+        self.segment_start_steps = 0
 
         # Action space variables
         self.max_speed = 4
@@ -256,17 +256,17 @@ class Reward:
         if current_segment == 5 or current_segment == 7:
             # If we are just starting the sgement
             if current_segment != self.previous_segment:
-                self.segment_start_progress = progress
-            elif progress == 0:
-                self.segment_start_progress = 0
+                self.segment_start_steps = stes
+            elif steps == 0:
+                self.segment_start_steps = 0
 
-            segment_progress = progress - self.segment_start_progress
+            segment_steps = steps - self.segment_start_steps
 
-            SPR = segment_progress
+            SPR = segment_steps
 
             print(f"Car location: {x},{y}")
-            print(f"Progress: {progress}")
-            print(f"Segment Progress: {segment_progress}")
+            print(f"Steps: {steps}")
+            print(f"Segment Steps: {segment_steps}")
 
         self.previous_segment = current_segment
 
