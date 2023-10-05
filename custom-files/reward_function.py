@@ -256,7 +256,7 @@ class Reward:
         if current_segment == 5 or current_segment == 7:
             # If we are just starting the sgement
             if current_segment != self.previous_segment:
-                self.segment_start_steps = stes
+                self.segment_start_steps = steps
             elif steps == 0:
                 self.segment_start_steps = 0
 
