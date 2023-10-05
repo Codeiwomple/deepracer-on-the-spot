@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import KDTree
 from shapely.geometry import Point, LineString
 
 
@@ -8,16 +9,81 @@ class Reward:
 
         # Reward weightings
         self.location_weight = 1
+        self.heading_weight = 1
 
         # Configurations
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
         self.distance_reward_cutoff = 2
 
+        # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
+        self.heading_threshold = 30
+        # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
+        # It simply means the car wont get close to 0 for being near the threshold. This value need to be bigger than the threshold.
+        self.heading_gradient = 30
+        # Range of the steering angles as defined in the action space
+        self.steering_angle_range = 60
+
         # Track geometries
         self.race_line = race_line
+        self.race_line_tree = KDTree(race_line)
         self.race_line_ls = LineString(race_line)
         self.inner_border_ls = LineString(inner_border)
         self.outer_border_ls = LineString(outer_border)
+
+        # Action space variables
+        self.max_speed = 4
+        self.min_speed = 1.3
+        self.max_steering_angle = 30
+
+    def heading_reward(self, direction, heading):
+        """
+        Function calculates the reward for the car based on its heading compared to the heading of the racing line.
+        This is based on a linear gradient defined in the configuration variables in the init function
+        """
+        # Calculate the difference between the track direction and the heading direction of the car
+        direction_diff = abs(direction - heading)
+        if direction_diff > 180:
+            direction_diff = 360 - direction_diff
+
+        # Reward the car based on how close it is to the correct heading. If it doesnt meet the threshold, give it nothing.
+        if direction_diff >= self.heading_threshold:
+            heading_reward = 0
+        else:
+            # If the car is within the threshold for a reward, allocate based on the gradient variable
+            heading_reward = (
+                self.heading_gradient - direction_diff
+            ) / self.heading_gradient
+
+        return heading_reward
+
+    def opposite_heading(self, heading):
+        """Function return the opposite of the given heading"""
+        if heading > 0:
+            return heading - 180
+        else:
+            return heading + 180
+
+        return 0
+
+    def calculate_heading_reward(self, car_loc, heading):
+        closest_points_i = self.race_line_tree.query([car_loc.x, car_loc.y], k=1)[1]
+        cp = race_line[(closest_points_i + 2) % len(race_line)]
+
+        # Calculate the direction in radians, arctan2(dy, dx), the result is (-pi, pi) in radians
+        direction = np.arctan2(cp[1] - car_loc.y, cp[0] - car_loc.x)
+
+        # Convert to degree
+        direction = np.degrees(direction)
+
+        # Calculate the reward for the current and opposite headings
+        # This will ensure the reward is track direction agnostic if the clostest 2 race line point are in the wrong direction to race
+        # Safe to assume the car wont be heading in the oppsoite direction for any significant ammount of time
+        heading_reward = self.heading_reward(direction, heading)
+        opposite_heading_reward = self.heading_reward(
+            direction, self.opposite_heading(heading)
+        )
+
+        return max(heading_reward, opposite_heading_reward)
 
     def calculate_location_reward(self, car_loc, track_width):
         """
@@ -52,9 +118,14 @@ class Reward:
         car_loc = Point(x, y)
 
         location_reward = self.calculate_location_reward(car_loc, track_width)
+        heading_reward = self.calculate_heading_reward(car_loc, heading)
 
         # Location reward: Based on how far the car is from the racing line
-        reward = self.location_weight * location_reward
+        LR = self.location_weight * location_reward
+        # Heading reward: reward the car for deading in the direction of the racing line
+        HR = self.heading_weight * heading_reward
+
+        reward = LR + HR
 
         return float(reward)
 
