@@ -11,10 +11,13 @@ class Reward:
         self.location_weight = 1
         self.heading_weight = 1
 
-        # Configurations
-        # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 2
+        self.partial_segment_reward_weight = 0
 
+        # Configurations
+        # Number of segments/ milestones to split the track into
+        self.num_segments = 10
+        # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
+        self.distance_reward_cutoff = 1
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
         self.heading_threshold = 30
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
@@ -30,10 +33,148 @@ class Reward:
         self.inner_border_ls = LineString(inner_border)
         self.outer_border_ls = LineString(outer_border)
 
+        # Segment variables
+        self.previous_segment = None
+        self.segment_steps = 0
+        self.segment_step_record = [
+            31,
+            35,
+            39,
+            46,
+            np.inf,
+            np.inf,
+            np.inf,
+            np.inf,
+            44,
+            31,
+        ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
+        self.segment_reward = 0
+        self.segment_start_progress = 0
+
         # Action space variables
         self.max_speed = 4
         self.min_speed = 1.3
         self.max_steering_angle = 30
+
+        self.off_track = False
+
+    def log(self, verbosity, message):
+        """Function to log/ print statements depending on verbosity level"""
+        if verbosity >= self.verbose:
+            print(message)
+
+    def get_current_segment(self, closest_index, waypoints):
+        """Function to return the cars current segment"""
+
+        # TODO Find a way to include this calculation in the initialisation function
+        # Divide the waypoint as per the number of segments
+        waypoints_per_segment = len(waypoints) / self.num_segments
+        milestones = [
+            int(i * waypoints_per_segment) for i in range(self.num_segments + 1)
+        ]
+
+        # Determine current segment using the 'next' milestone
+        for i, milestone in enumerate(milestones):
+            if closest_index < milestone:
+                return i
+        return None
+
+    def calculate_segment_step_reward(self, current_segment, progress):
+        """Function to calculate the reward when the car passes a milestone"""
+        reward = 0
+        # If the previous segment is None the car has started part way through
+        # So no segment reward should be given: set to inf so no record recorded
+        if self.previous_segment is None:
+            self.log(2, "The car started part way through this segment")
+
+            self.segment_steps = np.inf
+
+        # Agent went off track during the segment
+        elif self.off_track:
+            self.log(2, "The agent went off track in this segment")
+            self.segment_steps = np.inf
+
+        # Agent was reset in the same segemnt
+        # If the car has completed the segemnt in an impossible progress score
+        elif progress <= (100 / self.num_segments) - 1:
+            self.log(
+                2,
+                "Impossible record: The agent may have been reset into the same segemnt",
+            )
+
+            self.segment_steps = np.inf
+
+        # If the car has jumped a segment
+        elif current_segment != self.previous_segment + 1:
+            if current_segment == (self.previous_segment + 1) % self.num_segments:
+                # New lap! TODO
+                self.log(2, "Car has started a new lap!")
+
+                reward = self.segment_complete(current_segment)
+                self.segment_steps = 0
+
+                self.log(2, "The current segment records are:")
+                self.log(2, self.segment_step_record)
+            else:
+                # Agent has been reset
+                self.log(2, "The agent has been reset")
+                # Set steps to inf to stop a record for partial completion
+                self.segment_steps = np.inf
+
+        # Car completed the segemnt properly
+        else:
+            reward = self.segment_complete(current_segment)
+            self.segment_steps = 0
+
+        self.off_track = False
+        return reward
+
+    def segment_complete(self, current_segment):
+        """Function handles the proper completion of a segment"""
+        # If car has performed a record segment
+        if self.segment_steps <= self.segment_step_record[current_segment - 2]:
+            # Update the record
+            self.segment_step_record[current_segment - 2] = self.segment_steps
+
+            self.log(2, "New record for segment")
+            self.log(2, self.segment_step_record)
+
+            return self.segment_reward
+
+        # Partial reward for completion within a certain percentage of the record
+        partial_reward = 0
+
+        if self.segment_steps <= partial_reward:
+            self.log(2, "Partial segment reward")
+            self.log(2, self.segment_step_record)
+
+            return self.segment_reward * self.partial_segment_reward_weight
+
+        return 0
+
+    def calculate_location_reward(self, car_loc, track_width):
+        """
+        Function calculates the reward based on how far the car is from the racing line.
+        The reward should be 1 if the car is on the racing line
+        and reduce in a linear gradient to the edge of the track or a cut off distance
+        """
+        # Calculate distances
+        inner_dist = car_loc.distance(self.inner_border_ls)
+        racing_dist = car_loc.distance(self.race_line_ls)
+        outer_dist = car_loc.distance(self.outer_border_ls)
+
+        # Calculate the cutoff
+        cutoff_distance = track_width / self.distance_reward_cutoff
+
+
+        # If the car is outside the reward section
+        if racing_dist > cutoff_distance:
+            return 0
+        else:
+            # Otherwise return score based on the gradient
+            return 1 - (racing_dist / cutoff_distance)
+
+        return 0
 
     def heading_reward(self, direction, heading):
         """
@@ -83,30 +224,7 @@ class Reward:
             direction, self.opposite_heading(heading)
         )
 
-        return max(heading_reward, opposite_heading_reward)
-
-    def calculate_location_reward(self, car_loc, track_width):
-        """
-        Function calculates the reward based on how far the car is from the racing line.
-        The reward should be 1 if the car is on the racing line
-        and reduce in a linear gradient to the edge of the track or a cut off distance
-        """
-        # Calculate distances
-        inner_dist = car_loc.distance(self.inner_border_ls)
-        racing_dist = car_loc.distance(self.race_line_ls)
-        outer_dist = car_loc.distance(self.outer_border_ls)
-
-        # Calculate the cutoff
-        cutoff_distance = track_width / self.distance_reward_cutoff
-
-        # If the car is outside the reward section
-        if racing_dist > cutoff_distance:
-            return 0
-        else:
-            # Otherwise return score based on the gradient
-            return 1 - (racing_dist / cutoff_distance)
-
-        return 0
+        return direction, max(heading_reward, opposite_heading_reward)
 
     def reward_function(self, params):
         # DeepRacer input parameters
@@ -114,19 +232,55 @@ class Reward:
         y = params["y"]
         track_width = params["track_width"]
         heading = params["heading"]
+        progress = params["progress"]
+        speed = params["speed"]
+        steps = params["steps"]
+        steering_angle = params["steering_angle"]
+        is_offtrack = params["is_offtrack"]
+        waypoints = params["waypoints"]
+        closest_index = params["closest_waypoints"][0]
 
         # Car location
         car_loc = Point(x, y)
 
+        """Action level rewards"""
         location_reward = self.calculate_location_reward(car_loc, track_width)
-        heading_reward = self.calculate_heading_reward(car_loc, heading)
+        direction, heading_reward = self.calculate_heading_reward(car_loc, heading)
 
+        """Segment level rewards"""
+        # Calculate which segment of the track the car is currently in
+        current_segment = self.get_current_segment(closest_index, waypoints)
+
+        SPR = 0
+
+        # Add a progress reward for segments 5 and 7
+        if current_segment == 5 or current_segment == 7:
+            # If we are just starting the sgement
+            if current_segment != self.previous_segment:
+                self.segment_start_progress = progress
+
+            segment_progress = progress - self.segment_start_progress
+
+            SPR = segment_progress
+
+            print(f"Car location: {x},{y}")
+            print(f"Segment Progress: {segment_progress}")
+
+        self.previous_segment = current_segment
+
+        step_reward = 0
+
+        # Maintain segment level off-track variable
+        if is_offtrack:
+            self.off_track = True
+
+        """Calculate the reward for this step"""
         # Location reward: Based on how far the car is from the racing line
         LR = self.location_weight * location_reward
         # Heading reward: reward the car for deading in the direction of the racing line
         HR = self.heading_weight * heading_reward
 
-        reward = LR + HR
+        reward = LR + HR + SPR
 
         return float(reward)
 
