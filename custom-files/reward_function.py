@@ -251,19 +251,21 @@ class Reward:
         current_segment = self.get_current_segment(closest_index, waypoints)
 
         SPR = 0
-        self.segment_start_progress = 0
 
         # Add a progress reward for segments 5 and 7
         if current_segment == 5 or current_segment == 7:
             # If we are just starting the sgement
             if current_segment != self.previous_segment:
                 self.segment_start_progress = progress
+            elif progress == 0:
+                self.segment_start_progress = 0
 
             segment_progress = progress - self.segment_start_progress
 
             SPR = segment_progress
 
             print(f"Car location: {x},{y}")
+            print(f"Progress: {progress}")
             print(f"Segment Progress: {segment_progress}")
 
         self.previous_segment = current_segment
