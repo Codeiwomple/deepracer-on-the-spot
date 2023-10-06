@@ -238,6 +238,7 @@ class Reward:
         is_offtrack = params["is_offtrack"]
         waypoints = params["waypoints"]
         closest_index = params["closest_waypoints"][0]
+        all_wheels_on_track = params["all_wheels_on_track"]
 
         # Car location
         car_loc = Point(x, y)
@@ -282,6 +283,9 @@ class Reward:
         HR = self.heading_weight * heading_reward
 
         reward = LR + HR + SPR
+
+        if not all_wheels_on_track:
+            reward *= -1
 
         print(f"Car location: {x},{y}")
         print(f"Segment: {current_segment}")
