@@ -254,6 +254,8 @@ class Reward:
 
         # Add a progress reward for segments 5 and 7
         if current_segment == 5 or current_segment == 7:
+            SPR = progress
+            """
             # If we are just starting the sgement
             if current_segment != self.previous_segment:
                 self.segment_start_steps = steps
@@ -267,6 +269,7 @@ class Reward:
             print(f"Car location: {x},{y}")
             print(f"Steps: {steps}")
             print(f"Segment Steps: {segment_steps}")
+            """
 
         self.previous_segment = current_segment
 
