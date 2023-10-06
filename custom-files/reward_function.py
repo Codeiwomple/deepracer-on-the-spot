@@ -19,10 +19,10 @@ class Reward:
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
         self.distance_reward_cutoff = 3
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
-        self.heading_threshold = 30
+        self.heading_threshold = 60
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
         # It simply means the car wont get close to 0 for being near the threshold. This value need to be bigger than the threshold.
-        self.heading_gradient = 30
+        self.heading_gradient = 60
         # Range of the steering angles as defined in the action space
         self.steering_angle_range = 60
 
