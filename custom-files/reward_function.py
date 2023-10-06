@@ -17,7 +17,7 @@ class Reward:
         # Number of segments/ milestones to split the track into
         self.num_segments = 10
         # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 1
+        self.distance_reward_cutoff = 3
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
         self.heading_threshold = 30
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
@@ -286,18 +286,18 @@ class Reward:
 
         if not all_wheels_on_track:
             reward *= -1
+        if is_offtrack:
+            reward - +5
 
         print(f"Car location: {x},{y}")
         print(f"Segment: {current_segment}")
-        print("")
         print(f"progress: {progress}")
         print(f"SPR: {SPR}")
-        print("")
         print(f"Heading: {heading}")
         print(f"Direction: {direction}")
         print(f"Heading reward: {heading_reward}")
-        print("")
         print(f"Location: {location_reward}")
+        print(f"Reward: {reward}")
 
         return float(reward)
 
