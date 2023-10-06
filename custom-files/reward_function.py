@@ -251,23 +251,6 @@ class Reward:
         # Calculate which segment of the track the car is currently in
         current_segment = self.get_current_segment(closest_index, waypoints)
 
-        SPR = 0
-
-        # Add a progress reward for segments 5 and 7
-        if current_segment == 5 or current_segment == 7:
-            SPR = progress
-            """
-            # If we are just starting the sgement
-            if current_segment != self.previous_segment:
-                self.segment_start_steps = steps
-            elif steps == 0:
-                self.segment_start_steps = 0
-
-            segment_steps = steps - self.segment_start_steps
-
-            SPR = segment_steps
-            """
-
         self.previous_segment = current_segment
 
         step_reward = 0
@@ -282,22 +265,10 @@ class Reward:
         # Heading reward: reward the car for deading in the direction of the racing line
         HR = self.heading_weight * heading_reward
 
-        reward = LR + HR + SPR
+        reward = LR + HR
 
-        if not all_wheels_on_track:
-            reward *= -1
         if is_offtrack:
-            reward - +5
-
-        print(f"Car location: {x},{y}")
-        print(f"Segment: {current_segment}")
-        print(f"progress: {progress}")
-        print(f"SPR: {SPR}")
-        print(f"Heading: {heading}")
-        print(f"Direction: {direction}")
-        print(f"Heading reward: {heading_reward}")
-        print(f"Location: {location_reward}")
-        print(f"Reward: {reward}")
+            reward = -5
 
         return float(reward)
 
