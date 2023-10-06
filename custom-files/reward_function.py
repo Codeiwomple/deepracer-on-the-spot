@@ -265,10 +265,6 @@ class Reward:
             segment_steps = steps - self.segment_start_steps
 
             SPR = segment_steps
-
-            print(f"Car location: {x},{y}")
-            print(f"Steps: {steps}")
-            print(f"Segment Steps: {segment_steps}")
             """
 
         self.previous_segment = current_segment
@@ -286,6 +282,18 @@ class Reward:
         HR = self.heading_weight * heading_reward
 
         reward = LR + HR + SPR
+
+        print(f"Car location: {x},{y}")
+        print(f"Segment: {current_segment}")
+        print("")
+        print(f"progress: {progress}")
+        print(f"SPR: {SPR}")
+        print("")
+        print(f"Heading: {heading}")
+        print(f"Direction: {direction}")
+        print(f"Heading reward: {heading_reward}")
+        print("")
+        print(f"Location: {location_reward}")
 
         return float(reward)
 
