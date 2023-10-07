@@ -1,5 +1,5 @@
 {
-  "batch_size": 256,
+  "batch_size": 512,
   "beta_entropy": 0.0001,
   "discount_factor": 0.999,
   "e_greedy_value": 0.05,
@@ -8,7 +8,7 @@
   "loss_type": "huber",
   "lr": 0.00001,
   "num_episodes_between_training": 40,
-  "num_epochs": 9,
+  "num_epochs": 10,
   "stack_size": 1,
   "term_cond_avg_score": 35000.0,
   "term_cond_max_episodes": 100000

@@ -15,7 +15,7 @@ class Reward:
             0.5  # Proportion of segment reward for getting close to the record
         )
         self.speed_weight = 1
-        self.smoothness_weight = 0
+        self.smoothness_weight = 1
 
         # Configurations
         # Number of segments/ milestones to split the track into
@@ -50,10 +50,10 @@ class Reward:
             39,
             38,
             45,
-            49,
+            45,
             41,
-            46,
-            42,
+            45,
+            40,
             31,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
         self.segment_reward = 0
@@ -397,9 +397,9 @@ class Reward:
         # Speed reward: Reward for faster speed at lower steering angles, slower speed at higher steering angles
         SR = self.speed_weight * speed_reward
         # Smoothness reward: reward the car for driving smoothly and not changing direction irratically
-        # SMR = self.smoothness_weight * smoothness_reward
+        SMR = self.smoothness_weight * smoothness_reward
 
-        reward = LR + HR + SR + SSR
+        reward = LR + HR + SR + SSR + SMR
 
         # Update the logging variables
         self.segment_totals["LR"] += LR
@@ -415,7 +415,7 @@ class Reward:
         if is_offtrack:
             reward = -5
 
-        if progress >= 99:
+        if progress == 100:
             reward += 100
 
         return float(reward)
