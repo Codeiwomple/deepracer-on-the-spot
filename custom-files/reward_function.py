@@ -352,7 +352,7 @@ class Reward:
         location_reward = self.calculate_location_reward(car_loc, track_width)
         heading_reward = self.calculate_heading_reward(car_loc, heading)[1]
         speed_reward = self.calculate_speed_reward(speed, steering_angle)
-        # smoothness_reward = self.calculate_smoothness_reward(steering_angle)
+        smoothness_reward = self.calculate_smoothness_reward(steering_angle)
 
         """Segment level rewards"""
         # Calculate which segment of the track the car is currently in
