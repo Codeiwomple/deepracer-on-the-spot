@@ -14,7 +14,7 @@ class Reward:
         self.partial_segment_reward_weight = (
             0.5  # Proportion of segment reward for getting close to the record
         )
-        self.speed_weight = 1
+        self.speed_weight = 2
         self.smoothness_weight = 1
 
         # Configurations
