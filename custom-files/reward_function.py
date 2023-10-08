@@ -9,7 +9,7 @@ class Reward:
 
         # Reward weightings
         self.location_weight = 1
-        self.heading_weight = 1
+        self.heading_weight = 2
         self.segment_step_reward_weight = 1
         self.partial_segment_reward_weight = (
             0.5  # Proportion of segment reward for getting close to the record
@@ -33,6 +33,12 @@ class Reward:
         self.heading_gradient = 60
         # Range of the steering angles as defined in the action space
         self.steering_angle_range = 60
+        # Number of steps before checking for step_progress_reward. 50 would check progress after every 50 steps.
+        self.progress_steps = 30
+        # Target number of steps per lap (update from logs after afew training jobs)
+        self.steps_per_lap = 385
+        # Static reward for better than expected progress in given number of steps. Should be slightly higher than 1 point per step.
+        self.step_progress_reward = 50
 
         # Track geometries
         self.race_line = race_line
@@ -49,10 +55,10 @@ class Reward:
             35,
             39,
             38,
-            45,
+            44,
             45,
             41,
-            45,
+            41,
             40,
             31,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
@@ -89,6 +95,17 @@ class Reward:
         self.log_current_speed = []
         self.log_current_distance = []
         self.log_current_smoothness = []
+
+    def calcuate_progress_reward(self, progress, steps):
+        """Function rewards the car if it progresses as expected after a given number of steps"""
+        expected_progress = (
+            steps / self.steps_per_lap
+        ) * 100  # Progress is % of track completion
+
+        if progress >= expected_progress:
+            return self.step_progress_reward
+
+        return 0
 
     def log(self, verbosity, message):
         """Function to log/ print statements depending on verbosity level"""
@@ -387,6 +404,12 @@ class Reward:
 
         self.previous_segment = current_segment
 
+        """Step based reward"""
+        PR = 0
+        # Every time the car takes n steps
+        if steps % self.progress_steps == 0:
+            PR = self.calcuate_progress_reward(progress, steps)
+
         """Calculate the reward for this step"""
         # Location reward: Based on how far the car is from the racing line
         LR = self.location_weight * location_reward
@@ -399,7 +422,7 @@ class Reward:
         # Smoothness reward: reward the car for driving smoothly and not changing direction irratically
         SMR = self.smoothness_weight * smoothness_reward
 
-        reward = LR + HR + SR + SSR + SMR
+        reward = LR + HR + SR + SSR + SMR + PR
 
         # Update the logging variables
         self.segment_totals["LR"] += LR
