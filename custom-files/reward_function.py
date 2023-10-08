@@ -8,7 +8,7 @@ class Reward:
         self.verbose = 2  # Verbosity level for output, 0 for none, 1 for lap level, 2 for segment level, 3 for action level.
 
         # Reward weightings
-        self.location_weight = 1
+        self.location_weight = 0
         self.heading_weight = 2
         self.segment_step_reward_weight = 1
         self.partial_segment_reward_weight = (
@@ -50,6 +50,7 @@ class Reward:
         # Segment variables
         self.previous_segment = None
         self.segment_steps = 0
+        self.segemnt_speeds = []
         self.segment_step_record = [
             31,
             35,
@@ -62,6 +63,7 @@ class Reward:
             40,
             31,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
+        self.segment_time_record = [0] * self.num_segments
         self.segment_reward = 0
 
         # Action space variables
@@ -144,6 +146,19 @@ class Reward:
         self.log_current_distance = []
         self.log_current_smoothness = []
 
+    def calculate_segment_time(self):
+        # Calculate avg speed per step for segment
+        # Average speed of segment
+        avg_speed = np.mean(self.log_current_speed)
+        t = avg_speed / self.log_current_steps
+
+        print(f"Speeds: {self.log_current_speed}")
+        print(f"Avg: {avg_speed}")
+        print(f"Steps: {self.log_current_steps}")
+        print(f"Time: {t}")
+
+        return t
+
     def update_log_segment(self, current_segment):
         """Update the segment level trackers"""
         self.log_segment_steps[current_segment].append(self.log_current_steps)
@@ -211,6 +226,12 @@ class Reward:
 
     def segment_complete(self, current_segment):
         """Function handles the proper completion of a segment"""
+
+        print(f"Calculating seg time!")
+        seg_time = self.calculate_segment_time()
+        if seg_time <= self.segment_time_record[current_segment - 2]:
+            self.segment_time_record[current_segment - 2] = seg_time
+            print("NEW SEGMENT TIME RECORD")
 
         self.update_log_segment(current_segment)
 
@@ -386,6 +407,7 @@ class Reward:
 
             self.log(2, "Rewards for this segment: ")
             self.log(2, self.segment_totals)
+
             """
             self.log(2, "segment_steps = ")
             self.log(2, self.log_segment_steps)
@@ -396,6 +418,7 @@ class Reward:
             self.log(2, "segment_smoothness = ")
             self.log(2, self.log_segment_smoothness)
             """
+
             # Update tracking and logging variables
             for k in self.segment_totals:
                 self.segment_totals[k] = 0
