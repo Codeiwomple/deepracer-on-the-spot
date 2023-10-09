@@ -8,13 +8,11 @@ class Reward:
         self.verbose = 2  # Verbosity level for output, 0 for none, 1 for lap level, 2 for segment level, 3 for action level.
 
         # Reward weightings
-        self.location_weight = 0
         self.heading_weight = 2
         self.segment_step_reward_weight = 1
         self.partial_segment_reward_weight = (
             0.5  # Proportion of segment reward for getting close to the record
         )
-        self.speed_weight = 2
         self.smoothness_weight = 1
 
         # Configurations
@@ -24,8 +22,6 @@ class Reward:
         self.smoothing_buffer_size = 3
         # Proportion of record steps to give a partial reward 1.1 = within 10% of the segent record
         self.segment_reward_threshold = 1.1
-        # Proportion of track width for distance reward cutoff. 2 would be half track width, 3 a third etc. Use the visualisation NB to help choose.
-        self.distance_reward_cutoff = 3
         # Cutoff/ max diff/ threshold for heading reward e.g. value of 10 will mean heading has to be within 10 deg for a reward
         self.heading_threshold = 60
         # The endpoint of the gradient: The reward gradient will be calculated off this value instead of the threshold.
@@ -35,17 +31,12 @@ class Reward:
         self.steering_angle_range = 60
         # Number of steps before checking for step_progress_reward. 50 would check progress after every 50 steps.
         self.progress_steps = 30
-        # Target number of steps per lap (update from logs after afew training jobs)
-        self.steps_per_lap = 385
-        # Static reward for better than expected progress in given number of steps. Should be slightly higher than 1 point per step.
-        self.step_progress_reward = 50
+
+        self.segment_time_reward = 0
 
         # Track geometries
         self.race_line = race_line
         self.race_line_tree = KDTree(race_line)
-        self.race_line_ls = LineString(race_line)
-        self.inner_border_ls = LineString(inner_border)
-        self.outer_border_ls = LineString(outer_border)
 
         # Segment variables
         self.previous_segment = None
@@ -79,35 +70,14 @@ class Reward:
 
         # Output/ log variables
         self.segment_totals = {
-            "LR": 0,
             "HR": 0,
             "SSR": 0,
-            "SR": 0,
-            "PR": 0,
             "SMR": 0,
+            "STR": 0
             "Total": 0,
         }
 
-        self.log_segment_steps = {i: [] for i in range(1, self.num_segments + 1)}
-        self.log_segemnt_speed = {i: [] for i in range(1, self.num_segments + 1)}
-        self.log_segment_distance = {i: [] for i in range(1, self.num_segments + 1)}
-        self.log_segment_smoothness = {i: [] for i in range(1, self.num_segments + 1)}
-
-        self.log_current_steps = 0
-        self.log_current_speed = []
-        self.log_current_distance = []
-        self.log_current_smoothness = []
-
-    def calcuate_progress_reward(self, progress, steps):
-        """Function rewards the car if it progresses as expected after a given number of steps"""
-        expected_progress = (
-            steps / self.steps_per_lap
-        ) * 100  # Progress is % of track completion
-
-        if progress >= expected_progress:
-            return self.step_progress_reward
-
-        return 0
+        self.segment_speeds = []
 
     def log(self, verbosity, message):
         """Function to log/ print statements depending on verbosity level"""
@@ -139,40 +109,20 @@ class Reward:
                 return i
         return None
 
-    def reset_log_current(self):
-        """Function resets the logging/ tracking variables"""
-        self.log_current_steps = 0
-        self.log_current_speed = []
-        self.log_current_distance = []
-        self.log_current_smoothness = []
-
     def calculate_segment_time(self):
         # Calculate avg speed per step for segment
         # Average speed of segment
-        avg_speed = np.mean(self.log_current_speed)
-        t = len(self.log_current_speed) / avg_speed
+        avg_speed = np.mean(self.segment_speeds)
+        time = len(self.segment_speeds) / avg_speed
 
-        print(f"Speeds: {self.log_current_speed}")
+        print(f"Speeds: {self.segment_speeds}")
         print(f"Avg: {avg_speed}")
-        print(f"Steps (len) {len(self.log_current_speed)}")
-        print(f"Time: {t}")
+        print(f"Steps (len) {len(self.segment_speeds)}")
+        print(f"Time: {time}")
 
-        return t
+        return time
 
-    def update_log_segment(self, current_segment):
-        """Update the segment level trackers"""
-        self.log_segment_steps[current_segment].append(self.log_current_steps)
-        self.log_segemnt_speed[current_segment].append(np.mean(self.log_current_speed))
-        self.log_segment_distance[current_segment].append(
-            np.mean(self.log_current_distance)
-        )
-        self.log_segment_smoothness[current_segment].append(
-            np.mean(self.log_current_smoothness)
-        )
-
-        self.reset_log_current()
-
-    def calculate_segment_step_reward(self, current_segment, progress):
+    def handle_segment_change(self, current_segment, progress):
         """Function to calculate the reward when the car passes a milestone"""
         reward = 0
         # If the previous segment is None the car has started part way through
@@ -196,7 +146,6 @@ class Reward:
             )
 
             self.segment_steps = np.inf
-            self.reset_log_current()
 
         # If the car has jumped a segment
         elif current_segment != self.previous_segment + 1:
@@ -214,7 +163,6 @@ class Reward:
                 self.log(2, "The agent has been reset")
                 # Set steps to inf to stop a record for partial completion
                 self.segment_steps = np.inf
-                self.reset_log_current()
 
         # Car completed the segemnt properly
         else:
@@ -227,16 +175,23 @@ class Reward:
     def segment_complete(self, current_segment):
         """Function handles the proper completion of a segment"""
 
-        print(f"Calculating seg time!")
-        seg_time = self.calculate_segment_time()
-        print(
-            f"Segment: {current_segment}, Time: {seg_time}, Record: {self.segment_time_record[current_segment - 2]}"
+        # Partial reward for completion within a certain percentage of the record
+        partial_reward = (
+            self.segment_time_record[current_segment - 2]
+            * self.segment_reward_threshold
         )
+
+        print(f"Segment {current_segment} Complete!")
+        seg_time = self.calculate_segment_time()
         if seg_time <= self.segment_time_record[current_segment - 2]:
             self.segment_time_record[current_segment - 2] = seg_time
             print("NEW SEGMENT TIME RECORD")
+            print(self.segment_time_record)
+            self.segment_time_reward = 50
 
-        self.update_log_segment(current_segment)
+        if seg_time <= partial_reward:
+            print("Partial time reward")
+            self.segment_time_reward = 25
 
         # If car has performed a record segment
         if self.segment_steps <= self.segment_step_record[current_segment - 2]:
@@ -259,31 +214,6 @@ class Reward:
             self.log(2, self.segment_step_record)
 
             return self.segment_reward * self.partial_segment_reward_weight
-
-        return 0
-
-    def calculate_location_reward(self, car_loc, track_width):
-        """
-        Function calculates the reward based on how far the car is from the racing line.
-        The reward should be 1 if the car is on the racing line
-        and reduce in a linear gradient to the edge of the track or a cut off distance
-        """
-        # Calculate distances
-        inner_dist = car_loc.distance(self.inner_border_ls)
-        racing_dist = car_loc.distance(self.race_line_ls)
-        outer_dist = car_loc.distance(self.outer_border_ls)
-
-        # Calculate the cutoff
-        cutoff_distance = track_width / self.distance_reward_cutoff
-
-        self.log_current_distance.append(racing_dist)
-
-        # If the car is outside the reward section
-        if racing_dist > cutoff_distance:
-            return 0
-        else:
-            # Otherwise return score based on the gradient
-            return 1 - (racing_dist / cutoff_distance)
 
         return 0
 
@@ -345,13 +275,6 @@ class Reward:
 
         return direction, max(heading_reward, opposite_heading_reward)
 
-    def calculate_speed_reward(self, speed, steering_angle):
-        """
-        Function allocates reward based on how fast the car is moving.
-        """
-        # Normalise speed
-        return (speed - self.min_speed) / (self.max_speed - self.min_speed)
-
     def calculate_smoothness_reward(self, steering_angle):
         """
         Function calculates a reward based on the range of the last n steering angles.
@@ -360,8 +283,6 @@ class Reward:
         """
         # Add to buffer
         self.buffer_add(steering_angle)
-
-        self.log_current_smoothness.append(self.buffer_range())
 
         return 1 - (self.buffer_range() / self.steering_angle_range)
 
@@ -379,8 +300,7 @@ class Reward:
         waypoints = params["waypoints"]
         closest_index = params["closest_waypoints"][0]
 
-        self.log_current_steps += 1
-        self.log_current_speed.append(speed)
+        self.segment_speeds.append(speed)
 
         # Car location
         car_loc = Point(x, y)
@@ -390,9 +310,7 @@ class Reward:
             self.off_track = True
 
         """Action level rewards"""
-        location_reward = self.calculate_location_reward(car_loc, track_width)
         heading_reward = self.calculate_heading_reward(car_loc, heading)[1]
-        speed_reward = self.calculate_speed_reward(speed, steering_angle)
         smoothness_reward = self.calculate_smoothness_reward(steering_angle)
 
         """Segment level rewards"""
@@ -403,7 +321,7 @@ class Reward:
 
         # If the car has changed segment
         if current_segment != self.previous_segment:
-            step_reward = self.calculate_segment_step_reward(current_segment, progress)
+            step_reward = self.handle_segment_change(current_segment, progress)
 
             # Update the log
             self.segment_totals["SSR"] = step_reward * self.segment_step_reward_weight
@@ -411,55 +329,38 @@ class Reward:
             self.log(2, "Rewards for this segment: ")
             self.log(2, self.segment_totals)
 
-            """
-            self.log(2, "segment_steps = ")
-            self.log(2, self.log_segment_steps)
-            self.log(2, "segment_speeds = ")
-            self.log(2, self.log_segemnt_speed)
-            self.log(2, "segment_distances = ")
-            self.log(2, self.log_segment_distance)
-            self.log(2, "segment_smoothness = ")
-            self.log(2, self.log_segment_smoothness)
-            """
-
             # Update tracking and logging variables
             for k in self.segment_totals:
                 self.segment_totals[k] = 0
 
             self.segment_reward = 0
+            self.segment_speeds = []
 
         self.previous_segment = current_segment
 
-        """Step based reward"""
-        PR = 0
-        # Every time the car takes n steps
-        if steps % self.progress_steps == 0:
-            PR = self.calcuate_progress_reward(progress, steps)
-
         """Calculate the reward for this step"""
-        # Location reward: Based on how far the car is from the racing line
-        LR = self.location_weight * location_reward
+
         # Heading reward: reward the car for deading in the direction of the racing line
         HR = self.heading_weight * heading_reward
         # Segment step reward: Reward for completeing each segment in a minimum number of steps
         SSR = self.segment_step_reward_weight * step_reward
-        # Speed reward: Reward for faster speed at lower steering angles, slower speed at higher steering angles
-        SR = self.speed_weight * speed_reward
         # Smoothness reward: reward the car for driving smoothly and not changing direction irratically
         SMR = self.smoothness_weight * smoothness_reward
 
-        reward = LR + HR + SR + SSR + SMR + PR
+        STR = self.segment_time_reward
+
+        reward = HR + SSR + SMR
 
         # Update the logging variables
-        self.segment_totals["LR"] += LR
         self.segment_totals["HR"] += HR
-        self.segment_totals["SR"] += SR
-        # self.segment_totals["SMR"] += SMR
+        self.segment_totals["SMR"] += SMR
+        self.segment_totals["STR"] += STR
         self.segment_totals["Total"] += reward
 
         """Update the tracking variable at the end of step"""
         self.segment_steps += 1
         self.segment_reward += reward
+        self.segment_time_reward = 0
 
         if is_offtrack:
             reward = -5
