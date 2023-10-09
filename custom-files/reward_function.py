@@ -54,7 +54,18 @@ class Reward:
             40,
             31,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
-        self.segment_time_record = [np.inf] * self.num_segments
+        self.segment_time_record = [
+            20.07600434310532,
+            17.302909051584297,
+            23.056048429182756,
+            19.278688524590166,
+            29.4276259345508,
+            24.885189437428245,
+            24.2728184553661,
+            20.539608479561824,
+            17.977986139421116,
+            24.55261274158912,
+        ]
         self.segment_reward = 0
 
         # Action space variables
@@ -189,7 +200,7 @@ class Reward:
             print(self.segment_time_record)
             self.segment_time_reward = 50
 
-        if seg_time <= partial_reward:
+        elif seg_time <= partial_reward:
             print("Partial time reward")
             self.segment_time_reward = 25
 
@@ -349,7 +360,7 @@ class Reward:
 
         STR = self.segment_time_reward
 
-        reward = HR + SSR + SMR
+        reward = HR + SSR + SMR + STR
 
         # Update the logging variables
         self.segment_totals["HR"] += HR
