@@ -55,23 +55,23 @@ class Reward:
             31,
         ]  # [np.inf] * self.num_segments  # Update this from the logs after training. Ensure the size matches number of segments. Or guess or use np.inf to start
         self.segment_time_record = [
-            20.07600434310532,
+            17.955008870692957,
             17.302909051584297,
-            23.056048429182756,
-            19.278688524590166,
-            29.4276259345508,
-            24.885189437428245,
+            19.91142706102811,
+            17.667287456541203,
+            25.930498610624976,
+            22.663374979248445,
             24.2728184553661,
-            20.539608479561824,
+            20.15755379526728,
             17.977986139421116,
-            24.55261274158912,
+            18.678387354731765,
         ]
 
         self.lap_metrics = {
             "current_steps": 0,
             "current_speeds": [],
-            "step_record": 0,
-            "time_record": 0,
+            "step_record": np.inf,
+            "time_record": np.inf,
         }
         self.prev_progress = 0
 
@@ -134,11 +134,6 @@ class Reward:
         # Average speed of segment
         avg_speed = np.mean(self.segment_speeds)
         time = len(self.segment_speeds) / avg_speed
-
-        print(f"Speeds: {self.segment_speeds}")
-        print(f"Avg: {avg_speed}")
-        print(f"Steps (len) {len(self.segment_speeds)}")
-        print(f"Time: {time}")
 
         return time
 
@@ -398,7 +393,7 @@ class Reward:
                 print(self.lap_metrics["current_steps"])
                 self.lap_metrics["step_record"] = self.lap_metrics["current_steps"]
 
-                # reward += 500
+                reward += 500
 
             avg_speed = np.mean(self.lap_metrics["current_speeds"])
             t = self.lap_metrics["current_steps"] / avg_speed
@@ -406,16 +401,16 @@ class Reward:
             if t <= self.lap_metrics["time_record"]:
                 print(f"Record Lap Time!!! {t}")
                 self.lap_metrics["time_record"] = t
-                # reward += 500
+                reward += 500
 
             self.reset_lap_metrics()
-        
+
         if progress < self.prev_progress:
-            # Agent restarted 
+            # Agent restarted
             print(f"The agent has started a new lap")
             self.reset_lap_metrics
-        
-        self.prev_progress = progress        
+
+        self.prev_progress = progress
 
         if is_offtrack:
             reward = -5
