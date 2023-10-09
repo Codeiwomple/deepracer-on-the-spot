@@ -146,11 +146,13 @@ class Reward:
             self.log(2, "The car started part way through this segment")
 
             self.segment_steps = np.inf
+            self.reset_lap_metrics()
 
         # Agent went off track during the segment
         elif self.off_track:
             self.log(2, "The agent went off track in this segment")
             self.segment_steps = np.inf
+            self.reset_lap_metrics()
 
         # Agent was reset in the same segemnt
         # If the car has completed the segemnt in an impossible progress score
@@ -161,6 +163,7 @@ class Reward:
             )
 
             self.segment_steps = np.inf
+            self.reset_lap_metrics()
 
         # If the car has jumped a segment
         elif current_segment != self.previous_segment + 1:
@@ -177,7 +180,8 @@ class Reward:
                 # Agent has been reset
                 self.log(2, "The agent has been reset")
                 # Set steps to inf to stop a record for partial completion
-                self.segment_steps = np.inf
+                self.segment_steps = np.
+                self.reset_lap_metrics()
 
         # Car completed the segemnt properly
         else:
@@ -302,7 +306,7 @@ class Reward:
         return 1 - (self.buffer_range() / self.steering_angle_range)
 
     def reset_lap_metrics(self):
-        self.lap_metrics["curret_steps"] = 0
+        self.lap_metrics["current_steps"] = 0
         self.lap_metrics["current_speeds"] = []
 
     def reward_function(self, params):
