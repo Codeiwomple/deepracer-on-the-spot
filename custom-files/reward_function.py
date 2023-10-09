@@ -230,7 +230,7 @@ class Reward:
 
             return self.segment_reward * self.partial_segment_reward_weight
 
-        return 0
+        return 10
 
     def heading_reward(self, direction, heading):
         """
@@ -348,6 +348,8 @@ class Reward:
             self.log(2, "Rewards for this segment: ")
             self.log(2, self.segment_totals)
 
+            print(self.lap_metrics)
+
             # Update tracking and logging variables
             for k in self.segment_totals:
                 self.segment_totals[k] = 0
@@ -387,6 +389,8 @@ class Reward:
         if progress == 100:
             reward += 100
 
+            print("100 Progress")
+
             # Check lap metrics for rewards
             if self.lap_metrics["current_steps"] <= self.lap_metrics["step_record"]:
                 print("Lap completed in record number of steps!!!")
@@ -395,6 +399,12 @@ class Reward:
 
                 reward += 500
 
+            elif self.lap_metrics["current_steps"] <= (
+                self.lap_metrics["step_record"] * 1.1
+            ):
+                print("Partial lap step reward")
+                reward += 250
+
             avg_speed = np.mean(self.lap_metrics["current_speeds"])
             t = self.lap_metrics["current_steps"] / avg_speed
 
@@ -402,18 +412,21 @@ class Reward:
                 print(f"Record Lap Time!!! {t}")
                 self.lap_metrics["time_record"] = t
                 reward += 500
+            elif t <= (self.lap_metrics["time_record"] * 1.1):
+                print(f"Partial lap time reward")
+                reward += 250
 
             self.reset_lap_metrics()
 
         if progress < self.prev_progress:
             # Agent restarted
             print(f"The agent has started a new lap")
-            self.reset_lap_metrics
+            self.reset_lap_metrics()
 
         self.prev_progress = progress
 
         if is_offtrack:
-            reward = -5
+            reward = -20
 
         return float(reward)
 
