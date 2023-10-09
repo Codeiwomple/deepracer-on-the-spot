@@ -393,14 +393,15 @@ class Reward:
             reward += 100
 
             # Check lap metrics for rewards
-            if self.lap_metrics["curret_steps"] <= self.lap_metrics["step_record"]:
-                print(f"Lap completed in record number of steps!!!: {self.lap_metrics["curret_steps"]}")
-                self.lap_metrics["step_record"] = self.lap_metrics["curret_steps"]
+            if self.lap_metrics["current_steps"] <= self.lap_metrics["step_record"]:
+                print("Lap completed in record number of steps!!!")
+                print(self.lap_metrics["current_steps"])
+                self.lap_metrics["step_record"] = self.lap_metrics["current_steps"]
 
                 # reward += 500
 
             avg_speed = np.mean(self.lap_metrics["current_speeds"])
-            t = self.lap_metrics["curret_steps"] / avg_speed
+            t = self.lap_metrics["current_steps"] / avg_speed
 
             if t <= self.lap_metrics["time_record"]:
                 print(f"Record Lap Time!!! {t}")
