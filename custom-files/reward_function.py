@@ -180,7 +180,7 @@ class Reward:
                 # Agent has been reset
                 self.log(2, "The agent has been reset")
                 # Set steps to inf to stop a record for partial completion
-                self.segment_steps = np.
+                self.segment_steps = np.inf
                 self.reset_lap_metrics()
 
         # Car completed the segemnt properly
