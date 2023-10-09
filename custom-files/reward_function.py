@@ -13,7 +13,7 @@ class Reward:
         self.partial_segment_reward_weight = (
             0.5  # Proportion of segment reward for getting close to the record
         )
-        self.smoothness_weight = 1
+        self.smoothness_weight = 0.5
 
         # Configurations
         # Number of segments/ milestones to split the track into
@@ -66,6 +66,15 @@ class Reward:
             17.977986139421116,
             24.55261274158912,
         ]
+
+        self.lap_metrics = {
+            "current_steps": 0,
+            "current_speeds": [],
+            "step_record": 0,
+            "time_record": 0,
+        }
+        self.prev_progress = 0
+
         self.segment_reward = 0
 
         # Action space variables
@@ -198,11 +207,11 @@ class Reward:
             self.segment_time_record[current_segment - 2] = seg_time
             print("NEW SEGMENT TIME RECORD")
             print(self.segment_time_record)
-            self.segment_time_reward = 50
+            self.segment_time_reward = 100
 
         elif seg_time <= partial_reward:
             print("Partial time reward")
-            self.segment_time_reward = 25
+            self.segment_time_reward = 50
 
         # If car has performed a record segment
         if self.segment_steps <= self.segment_step_record[current_segment - 2]:
@@ -297,6 +306,10 @@ class Reward:
 
         return 1 - (self.buffer_range() / self.steering_angle_range)
 
+    def reset_lap_metrics(self):
+        self.lap_metrics["curret_steps"] = 0
+        self.lap_metrics["current_speeds"] = []
+
     def reward_function(self, params):
         # DeepRacer input parameters
         x = params["x"]
@@ -372,12 +385,39 @@ class Reward:
         self.segment_steps += 1
         self.segment_reward += reward
         self.segment_time_reward = 0
+        self.lap_metrics["current_steps"] += 1
+        self.lap_metrics["current_speeds"].append(speed)
+
+        # Lap complete!
+        if progress == 100:
+            reward += 100
+
+            # Check lap metrics for rewards
+            if self.lap_metrics["curret_steps"] <= self.lap_metrics["step_record"]:
+                print(f"Lap completed in record number of steps!!!: {self.lap_metrics["curret_steps"]}")
+                self.lap_metrics["step_record"] = self.lap_metrics["curret_steps"]
+
+                # reward += 500
+
+            avg_speed = np.mean(self.lap_metrics["current_speeds"])
+            t = self.lap_metrics["curret_steps"] / avg_speed
+
+            if t <= self.lap_metrics["time_record"]:
+                print(f"Record Lap Time!!! {t}")
+                self.lap_metrics["time_record"] = t
+                # reward += 500
+
+            self.reset_lap_metrics()
+        
+        if progress < self.prev_progress:
+            # Agent restarted 
+            print(f"The agent has started a new lap")
+            self.reset_lap_metrics
+        
+        self.prev_progress = progress        
 
         if is_offtrack:
             reward = -5
-
-        if progress == 100:
-            reward += 100
 
         return float(reward)
 
