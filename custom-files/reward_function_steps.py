@@ -156,6 +156,32 @@ class Reward:
             print(f"Partial time reward for segment (10pc) {current_segment}")
             self.segment_time_reward = 25
 
+        # Partial reward for completion within a certain percentage of the record
+        partial_reward_10pc = self.segment_step_record[current_segment - 2] * 1.1
+        partial_reward_5pc = self.segment_step_record[current_segment - 2] * 1.05
+
+        # Step rewards
+        if self.segment_steps <= self.segment_step_record[current_segment - 2]:
+            # Update the record
+            self.segment_step_record[current_segment - 2] = self.segment_steps
+
+            self.log(2, f"New step reward for segment {current_segment}")
+            self.log(2, self.segment_step_record)
+
+            self.segment_step_reward = 100
+
+        elif self.segment_steps <= partial_reward_5pc:
+            self.log(2, f"Partial step reward for segment (5pc) {current_segment}")
+            self.log(2, self.segment_step_record)
+
+            self.segment_step_reward = 50
+
+        elif self.segment_steps <= partial_reward_10pc:
+            self.log(2, f"Partial step reward for segment (10pc) {current_segment}")
+            self.log(2, self.segment_step_record)
+
+            self.segment_step_reward = 25
+
     def reset_lap_metrics(self):
         self.lap_metrics["current_steps"] = 0
         self.lap_metrics["current_speeds"] = []
@@ -224,6 +250,24 @@ class Reward:
             lap_reward = 100
 
             print("100 Progress")
+
+            # Lap step rewards
+            partial_reward_10pc = self.lap_metrics["step_record"] * 1.1
+            partial_reward_5pc = self.lap_metrics["step_record"] * 1.05
+
+            if self.lap_metrics["current_steps"] <= self.lap_metrics["step_record"]:
+                print("Lap completed in record number of steps!!!")
+                print(self.lap_metrics["current_steps"])
+                self.lap_metrics["step_record"] = self.lap_metrics["current_steps"]
+
+                lap_reward += 1000
+
+            elif self.lap_metrics["current_steps"] <= partial_reward_5pc:
+                print("Partial lap step reward (5pc)")
+                lap_reward += 250
+            elif self.lap_metrics["current_steps"] <= partial_reward_10pc:
+                print("Partial lap step reward (10pc)")
+                lap_reward += 100
 
             avg_speed = np.mean(self.lap_metrics["current_speeds"])
             time = self.lap_metrics["current_steps"] / avg_speed
