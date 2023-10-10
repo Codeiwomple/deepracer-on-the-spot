@@ -243,7 +243,8 @@ class Reward:
                 print(f"Partial lap time reward (10pc)")
                 lap_reward += 100
 
-            print(f"This lap was {self.lap_metrics["current_steps"]} steps")
+            s = self.lap_metrics["current_steps"]
+            print(f"This lap was {s} steps")
             print(f"And took {time}")
 
             print(lap_reward)
