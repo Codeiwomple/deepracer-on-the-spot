@@ -265,7 +265,6 @@ class Reward:
                 reward += 1
 
         if is_offtrack:
-            reward = -20
             self.segment_steps = 0
             self.reset_lap_metrics()
 
