@@ -132,7 +132,7 @@ class Reward:
     def segment_complete(self, current_segment):
         """Function handles the proper completion of a segment"""
 
-        self.segment_step_reward = 10  # Default reward for completing segment
+        self.segment_step_reward = 5  # Default reward for completing segment
 
         # Partial reward for completion within a certain percentage of the record
         partial_reward_10pc = self.segment_time_record[current_segment - 2] * 1.1
