@@ -260,9 +260,13 @@ class Reward:
 
         reward = segment_reward + lap_reward
 
-        if current_segment == 1 or current_segment == 10:
+        straights = [1, 10, 2, 6]
+
+        if current_segment in straights:
             if speed >= 2:
                 reward += speed
+            if speed == 4:
+                reward += 1
 
         if is_offtrack:
             self.segment_steps = 0
