@@ -38,7 +38,7 @@ class Reward:
             "current_steps": 0,
             "current_speeds": [],
             "step_record": 444,
-            "time_record": 230.63218882975357,
+            "time_record": 210,
         }
 
         # Output/ log variables
@@ -143,7 +143,7 @@ class Reward:
 
         # Time rewards
         if seg_time <= self.segment_time_record[current_segment - 2]:
-            self.segment_time_record[current_segment - 2] = seg_time
+            # self.segment_time_record[current_segment - 2] = seg_time
             print(f"New time reward for segment {current_segment}")
             print(self.segment_time_record)
             self.segment_time_reward = 100
@@ -233,7 +233,7 @@ class Reward:
 
             if time <= self.lap_metrics["time_record"]:
                 print(f"Record Lap Time!!! {time}")
-                self.lap_metrics["time_record"] = time
+                # self.lap_metrics["time_record"] = time
                 lap_reward += 1000
 
             elif time <= partial_reward_5pc:
@@ -260,7 +260,7 @@ class Reward:
 
         reward = segment_reward + lap_reward
 
-        straights = [1, 10, 2, 6]
+        straights = [1, 10]
 
         if current_segment in straights:
             if speed >= 2:
