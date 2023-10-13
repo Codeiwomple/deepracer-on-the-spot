@@ -38,7 +38,7 @@ class Reward:
             "current_steps": 0,
             "current_speeds": [],
             "step_record": 444,
-            "time_record": 210,
+            "time_record": 195,
         }
 
         # Output/ log variables
@@ -269,6 +269,7 @@ class Reward:
                 reward += 1
 
         if is_offtrack:
+            reward = -10
             self.segment_steps = 0
             self.reset_lap_metrics()
 
