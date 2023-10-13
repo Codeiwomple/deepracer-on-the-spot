@@ -233,15 +233,15 @@ class Reward:
 
             if time <= self.lap_metrics["time_record"]:
                 print(f"Record Lap Time!!! {time}")
-                # self.lap_metrics["time_record"] = time
+                self.lap_metrics["time_record"] = time
                 lap_reward += 1000
 
             elif time <= partial_reward_5pc:
                 print(f"Partial lap time reward (5pc)")
-                lap_reward += 250
+                lap_reward += 750
             elif time <= partial_reward_10pc:
                 print(f"Partial lap time reward (10pc)")
-                lap_reward += 100
+                lap_reward += 500
 
             s = self.lap_metrics["current_steps"]
             print(f"This lap was {s} steps")
