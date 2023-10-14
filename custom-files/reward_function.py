@@ -38,7 +38,7 @@ class Reward:
             "current_steps": 0,
             "current_speeds": [],
             "step_record": 444,
-            "time_record": 180,
+            "time_record": 175,
         }
 
         # Output/ log variables
